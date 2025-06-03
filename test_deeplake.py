@@ -1,13 +1,52 @@
-import deeplake
-import tensorflow as tf
-import matplotlib.pyplot as plt
+import cv2
+import mediapipe as mp
 import os
 
-os.environ["ACTIVELOOP_TOKEN"] = ""
+# Set folder with videos
+VIDEO_FOLDER = 'raw_data/running'
+OUTPUT_FOLDER = 'output/annotated_videos'
+os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-ds = deeplake.load("hub://activeloop/kth-actions")
-# dataloader = ds.pytorch(num_workers=0, batch_size=4, shuffle=False)
-dataloader = ds.tensorflow()
+# Initialize MediaPipe
+mp_drawing = mp.solutions.drawing_utils
+mp_pose = mp.solutions.pose
 
-for i in range(3):
-    print(ds[i])
+# Pose detector setup
+with mp_pose.Pose(static_image_mode=False, min_detection_confidence=0.5, min_tracking_confidence=0.5) as pose:
+    # Loop through all video files
+    for filename in os.listdir(VIDEO_FOLDER):
+        if filename.endswith('.avi') or filename.endswith('.mp4'):
+            video_path = os.path.join(VIDEO_FOLDER, filename)
+            print(f"Processing: {video_path}")
+
+            cap = cv2.VideoCapture(video_path)
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            fps = cap.get(cv2.CAP_PROP_FPS)
+
+            output_path = os.path.join(OUTPUT_FOLDER, f"annotated_{filename}")
+            out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
+
+            while cap.isOpened():
+                success, frame = cap.read()
+                if not success:
+                    break
+
+                image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                results = pose.process(image)
+                annotated_image = frame.copy()
+
+                if results.pose_landmarks:
+                    mp_drawing.draw_landmarks(
+                        annotated_image,
+                        results.pose_landmarks,
+                        mp_pose.POSE_CONNECTIONS
+                    )
+
+                out.write(annotated_image)
+
+            cap.release()
+            out.release()
+            print(f"Saved: {output_path}")
+
+cv2.destroyAllWindows()
