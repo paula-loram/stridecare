@@ -74,4 +74,4 @@ with open(RESULT_CSV_PATH, mode='w', newline='') as csv_file:
 
             cap.release()
 
-print(f"✅ All angle data saved to: {RESULT_CSV_PATH}")
+print(f"All angle data saved to: {RESULT_CSV_PATH}")
