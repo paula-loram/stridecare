@@ -6,14 +6,7 @@ import os
 VIDEO_FOLDER = 'raw_data/running'
 OUTPUT_FOLDER = 'output/annotated_videos'
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
-
-# Initialize MediaPipe
-mp_drawing = mp.solutions.drawing_utils
-mp_pose = mp.solutions.pose
-
-# Pose detector setup
-with mp_pose.Pose(static_image_mode=False, min_detection_confidence=0.5, min_tracking_confidence=0.5) as pose:
-    # Loop through all video files
+# Loop through all video files
     for filename in os.listdir(VIDEO_FOLDER):
         if filename.endswith('.avi') or filename.endswith('.mp4'):
             video_path = os.path.join(VIDEO_FOLDER, filename)
