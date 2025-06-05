@@ -28,7 +28,7 @@ def calculate_angle(a, b, c):
     return angle_degrees
 
 # --- Main processing ---
-video_path = 'your_video.mp4'  
+video_path = 'raw_data/runner_vide.mp4'
 cap = cv2.VideoCapture(video_path)
 
 if not cap.isOpened():
