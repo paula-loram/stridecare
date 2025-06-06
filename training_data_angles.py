@@ -4,7 +4,9 @@ import math
 import pandas as pd
 from scipy.spatial.transform import Rotation as R_scipy # Renamed to avoid conflict
 
-# --- YOUR PROVIDED CARDAN ANGLES FUNCTION ---
+### The aim of this code is to change the information from the sensors in the healthy/injured data
+### into cardan angles for every frame in the recording.
+
 def cardanangles(R3):
     """
     Compute Cardan (XYZ) angles from a 3×3 rotation matrix R3.
