@@ -11,9 +11,9 @@ def cardanangles(R3):
     Returns [Rx, Ry, Rz] in radians, following the same conventions
     as your MATLAB `cardanangles`:
 
-      | Cz*Cy - Sz*Sy*Sx   Sz*Cy + Cz*Sy*Sx  -Sy*Cx |
-      | -Sz*Cx             Cz*Cx              Sx     |
-      | Cz*Sy + Cz*Sy*Sx   Sz*Sy - Cz*Cy*Sx  Cy*Cx  |
+      | Cz*Cy - Sz*Sy*Sx    Sz*Cy + Cz*Sy*Sx   -Sy*Cx |
+      | -Sz*Cx              Cz*Cx              Sx     |
+      | Cz*Sy + Cz*Sy*Sx    Sz*Sy - Cz*Cy*Sx   Cy*Cx  |
 
     That is: Rx about X, Ry about Y, Rz about Z.
     """
@@ -398,7 +398,8 @@ def analyze_gait_data(filepath: str) -> pd.DataFrame:
                 R_cluster_dynamic_to_neutral, _ = R_scipy.align_vectors(centered_dynamic_points, centered_neutral_cluster_points)
                 # This gives R_dynamic_cluster_to_neutral_cluster, we need R_global_to_dynamic_cluster_local
                 # The rotation of the current cluster frame relative to the neutral cluster frame
-                R_cluster_relative_to_neutral = R_cluster_dynamic_to_neutral.T # R_neutral_cluster_to_dynamic_cluster
+                R_cluster_relative_to_neutral = R_cluster_dynamic_to_neutral.inv() # <-- CORRECTED LINE
+                # R_neutral_cluster_to_dynamic_cluster
 
                 # Combine with anatomical-to-cluster transformation and global neutral cluster orientation
                 # R_segment_ACS_to_Global_Current = R_cluster_current_to_Global @ R_TCS_to_ACS_neutral
@@ -479,43 +480,43 @@ def analyze_gait_data(filepath: str) -> pd.DataFrame:
 
 # # --- Example of how to use the function to loop through files ---
 # if __name__ == '__main__':
-#     import os
+#       import os
 
-#     # IMPORTANT: Replace with the actual path to your folder containing JSON data files
-#     data_directory = 'path/to/your/json/data_folder/' # e.g., 'C:/Users/YourUser/Documents/GaitData/'
+#       # IMPORTANT: Replace with the actual path to your folder containing JSON data files
+#       data_directory = 'path/to/your/json/data_folder/' # e.g., 'C:/Users/YourUser/Documents/GaitData/'
 
-#     # Optional: Directory to save processed DataFrames
-#     output_df_directory = 'processed_angle_dfs/'
-#     os.makedirs(output_df_directory, exist_ok=True)
+#       # Optional: Directory to save processed DataFrames
+#       output_df_directory = 'processed_angle_dfs/'
+#       os.makedirs(output_df_directory, exist_ok=True)
 
-#     # Get a list of all JSON files in the directory
-#     json_files = [f for f in os.listdir(data_directory) if f.lower().endswith('.json')]
+#       # Get a list of all JSON files in the directory
+#       json_files = [f for f in os.listdir(data_directory) if f.lower().endswith('.json')]
 
-#     if not json_files:
-#         print(f"No JSON files found in '{data_directory}'. Please check the path and file types.")
-#     else:
-#         print(f"Found {len(json_files)} JSON files to process.")
+#       if not json_files:
+#           print(f"No JSON files found in '{data_directory}'. Please check the path and file types.")
+#       else:
+#           print(f"Found {len(json_files)} JSON files to process.")
 
-#     all_processed_angles = {} # To store the angle DataFrames from all files
+#       all_processed_angles = {} # To store the angle DataFrames from all files
 
-#     for json_file in json_files:
-#         full_file_path = os.path.join(data_directory, json_file)
+#       for json_file in json_files:
+#           full_file_path = os.path.join(data_directory, json_file)
 
-#         print(f"\nProcessing: {json_file}")
+#           print(f"\nProcessing: {json_file}")
 
-#         # Call the function to process the JSON data and get the angles DataFrame
-#         angles_df = analyze_gait_data(full_file_path)
+#           # Call the function to process the JSON data and get the angles DataFrame
+#           angles_df = analyze_gait_data(full_file_path)
 
-#         if not angles_df.empty: # Check if angles_df is not empty
-#             file_base_name = os.path.splitext(json_file)[0]
-#             all_processed_angles[file_base_name] = angles_df
-#             print(f"Successfully processed {json_file}. Generated DataFrame with {len(angles_df)} frames.")
+#           if not angles_df.empty: # Check if angles_df is not empty
+#               file_base_name = os.path.splitext(json_file)[0]
+#               all_processed_angles[file_base_name] = angles_df
+#               print(f"Successfully processed {json_file}. Generated DataFrame with {len(angles_df)} frames.")
 
-#             # Save the angles DataFrame to a CSV file for each processed file
-#             output_csv_path = os.path.join(output_df_directory, f'{file_base_name}_joint_angles_pelvis_hip_knee_ankle_no_z.csv')
-#             angles_df.to_csv(output_csv_path, index=False)
-#             print(f"Saved joint angles to {output_csv_path}")
-#         else:
-#             print(f"Failed to process or no valid angle data for {json_file}. No CSV saved.")
+#               # Save the angles DataFrame to a CSV file for each processed file
+#               output_csv_path = os.path.join(output_df_directory, f'{file_base_name}_joint_angles_pelvis_hip_knee_ankle_no_z.csv')
+#               angles_df.to_csv(output_csv_path, index=False)
+#               print(f"Saved joint angles to {output_csv_path}")
+#           else:
+#               print(f"Failed to process or no valid angle data for {json_file}. No CSV saved.")
 
-#     print("\nAll JSON files processed.")
+#       print("\nAll JSON files processed.")
