@@ -4,13 +4,13 @@ import pandas as pd
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-#from stridecare.preprocessor import preprocess_features
+# we need to import scalers
 #from stridecare.mediapipe_cardan_angles.final_mediapipe_angles import get_mediapipe_angles
 
 
 app = FastAPI()
 
-# @app.get("/predict")
+@app.get("/predict")
 # def predict(
 #         pickup_datetime: str,  # 2014-07-06 19:18:00
 #         pickup_longitude: float,    # -73.950655
