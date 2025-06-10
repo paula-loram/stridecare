@@ -16,6 +16,7 @@ from video_angle_processor import get_mediapipe_angles
 from api.preprocessing import load_scalers, preprocess_angles, preprocess_metadata
 
 # --- Configuration & Model Path ---
+#will be bucket
 MODEL_PATH = "./RNN/my_model_weights.weights.h5"
 
 # Global variable for the loaded model
@@ -43,6 +44,19 @@ app = FastAPI(
     description="API for video-based injury risk prediction using MediaPipe and RNN.",
     version="1.0.0"
 )
+
+@app.get("/")
+def root():
+    return {
+        'status' : 'backend up!'
+    }
+
+@app.get("/get_stick_fig_video")
+def root():
+    return {
+        'status' : 'backend up!'
+    }
+
 
 # --- FastAPI Startup Event: Load Model and Scalers ---
 @app.on_event("startup")
@@ -176,6 +190,8 @@ async def predict_injury_risk(
             os.unlink(temp_video_path)
             print(f"Backend: Cleaned up temporary video file: {temp_video_path}")
 
+<<<<<<< HEAD:main.py
+=======
 # --- Health Check Endpoint ---
 @app.get("/health")
 async def health_check():
@@ -185,18 +201,29 @@ async def health_check():
     from api.preprocessing import ohe_scaler, numerical_metadata_scaler # Specific scalers from preprocessing.py
     status = "healthy"
     detail = "All assets loaded."
+>>>>>>> 03d36e2c7e999f7dc9d6c18f7f0e29f47a235516:api/main.py
 
-    if model is None:
-        status = "degraded"
-        detail = "Model not loaded."
-    elif ohe_scaler is None or numerical_metadata_scaler is None: # Check specific scalers
-        status = "degraded"
-        detail = "Scalers not loaded."
+# # --- Health Check Endpoint ---
+# @app.get("/health")
+# async def health_check():
+#     """Returns a simple health check status, indicating if model and scalers are loaded."""
+#     # Note: `angles_scaler` and `metadata_scaler` here are references to global
+#     # variables in `preprocessing.py`. Their state is managed by `preprocessing.load_scalers()`.
+#     from preprocessing import ohe_scaler, numerical_metadata_scaler # Specific scalers from preprocessing.py
+#     status = "healthy"
+#     detail = "All assets loaded."
 
-    return {
-        "status": status,
-        "model_loaded": model is not None,
-        "ohe_scaler_loaded": ohe_scaler is not None, # Specific scaler status
-        "numerical_metadata_scaler_loaded": numerical_metadata_scaler is not None, # Specific scaler status
-        "detail": detail
-    }
+#     if model is None:
+#         status = "degraded"
+#         detail = "Model not loaded."
+#     elif ohe_scaler is None or numerical_metadata_scaler is None: # Check specific scalers
+#         status = "degraded"
+#         detail = "Scalers not loaded."
+
+#     return {
+#         "status": status,
+#         "model_loaded": model is not None,
+#         "ohe_scaler_loaded": ohe_scaler is not None, # Specific scaler status
+#         "numerical_metadata_scaler_loaded": numerical_metadata_scaler is not None, # Specific scaler status
+#         "detail": detail
+#     }
