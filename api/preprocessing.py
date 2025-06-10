@@ -8,11 +8,21 @@ import pandas as pd
 import joblib # To load pre-trained scikit-learn scalers
 import os
 from video_angle_processor import get_mediapipe_angles
+from google.cloud import storage
+
 
 # --- Configuration ---
 # Path to saved scalers. These paths are relative to the 'stridecare/' root
 # when the Docker container's WORKDIR is set to '/app'.
-SCALERS_DIR = "./scalers/"
+
+client = storage.Client()
+bucket_name = 'stridecare-models'
+bucket = client.get_bucket(bucket_name)
+blob_cat = bucket.blob('scalers/ohe.pkl') if bucket else None
+blob_num = bucket.blob('scalers/scaler.pkl') if bucket else None
+
+GCS_SCALERS_PREFIX = 'scalers/' #delete?
+SCALERS_DIR = "gs://stridecare-models/scalers/" #GCS file path
 CAT_METADATA_SCALER_FILENAME = "ohe.pkl" # For OneHotEncoder for gender
 NUML_METADATA_SCALER_FILENAME = "scaler.pkl" # For StandardScaler for age, weight, height
 
@@ -30,8 +40,8 @@ def load_scalers():
     """
     global cat_metadata_scaler, numerical_metadata_scaler
     try:
-        cat_metadata_scaler_path = os.path.join(SCALERS_DIR, CAT_METADATA_SCALER_FILENAME_FILENAME)
-        numerical_metadata_scaler_path = os.path.join(SCALERS_DIR, NUMERICAL_METADATA_SCALER_FILENAME)
+        cat_metadata_scaler_path = os.path.join(SCALERS_DIR, CAT_METADATA_SCALER_FILENAME)
+        numerical_metadata_scaler_path = os.path.join(SCALERS_DIR, NUML_METADATA_SCALER_FILENAME)
 
         if not os.path.exists(cat_metadata_scaler_path):
             raise FileNotFoundError(f"OneHotEncoder scaler not found at: {cat_metadata_scaler_path}")
@@ -168,11 +178,9 @@ def preprocess_angles(raw_angles_array: np.array) -> np.array:
         # Pad with zeros (or a specific padding value if used during training).
         # Match your training data padding strategy (pre-padding or post-padding)!
         padding_needed = RNN_SEQUENCE_LENGTH - processed_angles.shape[0]
-        # Example: Post-padding with zeros
+
         processed_angles = np.pad(processed_angles,
                                   ((0, padding_needed), (0, 0)),
                                   mode='constant', constant_values=0.0)
-
-    # Reshape for RNN input: (batch_size, sequence_length, num_features)
-    # For a single inference, batch_size is 1.
+        
     return processed_angles[np.newaxis, :, :]
