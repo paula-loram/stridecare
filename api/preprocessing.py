@@ -168,11 +168,9 @@ def preprocess_angles(raw_angles_array: np.array) -> np.array:
         # Pad with zeros (or a specific padding value if used during training).
         # Match your training data padding strategy (pre-padding or post-padding)!
         padding_needed = RNN_SEQUENCE_LENGTH - processed_angles.shape[0]
-        # Example: Post-padding with zeros
+
         processed_angles = np.pad(processed_angles,
                                   ((0, padding_needed), (0, 0)),
                                   mode='constant', constant_values=0.0)
-
-    # Reshape for RNN input: (batch_size, sequence_length, num_features)
-    # For a single inference, batch_size is 1.
+        
     return processed_angles[np.newaxis, :, :]
