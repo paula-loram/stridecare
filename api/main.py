@@ -5,7 +5,8 @@ import tempfile
 import json
 import numpy as np
 import pandas as pd
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+import shutil
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import Literal
 from starlette.responses import JSONResponse
@@ -18,7 +19,7 @@ from api.preprocessing import load_scalers, preprocess_angles, preprocess_metada
 # --- Configuration & Model Path ---
 #will be bucket
 MODEL_PATH = "./RNN/my_model_weights.weights.h5"
-
+TEMP_VIDEO_DIR = "temp_videos"
 # Global variable for the loaded model
 model = None
 
@@ -51,144 +52,189 @@ def root():
         'status' : 'backend up!'
     }
 
-@app.get("/get_stick_fig_video")
-def root():
-    return {
-        'status' : 'backend up!'
-    }
+@app.post("/get_stick_fig_video")
+async def upload_video(background_tasks: BackgroundTasks, video: UploadFile = File(...)):
+    """
+    Receives a video file, saves it temporarily, and then
+    starts a background task to process it with MediaPipe.
+    """
+    # return file name and content type
+    if not video:
+        return JSONResponse(status_code=400, content={"message": "No video file uploaded."})
+    # Check if the uploaded file is a video
+    if not video.filename:
+        return JSONResponse(status_code=400, content={"message": "No filename provided."})
+    if not video.content_type:
+        return JSONResponse(status_code=400, content={"message": "No content type provided."})
+    # Ensure the content type is a video format
+    if not video.filename.lower().endswith(('.mp4', '.mov', '.avi', '.mkv', '.flv')):
+        return JSONResponse(status_code=400, content={"message": "Unsupported video format. Please upload a valid video file."})
+    # Check if the content type is a video
+    if not video.content_type:
+        return JSONResponse(status_code=400, content={"message": "No content type provided."})
+    # if not video.content_type.startswith("video/"):
+    #     return JSONResponse(status_code=400, content={"message": "Uploaded file is not a video."})
+    print(f"Received video: {video.filename}, Content-Type: {video.content_type}, Entire content: {video.file.read(100)}...")
+    video.file.seek(0)  # Reset file pointer after reading for logging
+    # Create a temporary file to store the uploaded video
+    # Using tempfile.NamedTemporaryFile ensures a unique filename and proper cleanup on exit
+    # However, for background tasks, we manage deletion explicitly.
+    os.makedirs(TEMP_VIDEO_DIR, exist_ok=True)  # <-- Add this line
+
+    temp_file_path = os.path.join(TEMP_VIDEO_DIR, video.filename)
+    print(temp_file_path)
+    try:
+        with open(temp_file_path, "wb") as buffer:
+            shutil.copyfileobj(video.file, buffer)
+        print(f"Video saved temporarily to: {temp_file_path}")
+
+        # Add the video processing to background tasks
+        # background_tasks.add_task(process_video_with_mediapipe, temp_file_path)
+
+        return JSONResponse(status_code=200, content={
+            "message": "Video received and processing started in the background.",
+            "filename": video.filename,
+            "content_type": video.content_type,
+            "temp_path": temp_file_path
+        })
+    except Exception as e:
+        # Ensure temporary file is cleaned up if an error occurs during saving
+        if os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+        return JSONResponse(status_code=500, content={"message": f"Failed to save video: {e}"})
 
 
 # --- FastAPI Startup Event: Load Model and Scalers ---
-@app.on_event("startup")
-async def startup_event():
-    """Load the pre-trained model and scalers when the FastAPI app starts."""
-    global model
+# @app.on_event("startup")
+# async def startup_event():
+#     """Load the pre-trained model and scalers when the FastAPI app starts."""
+#     global model
 
-    # 1. Load the model
-    try:
-        model = tf.keras.models.load_model(MODEL_PATH)
-        # Optional: Check model output shape to confirm it matches expectations
-        # print(f"Model output shape: {model.output_shape}")
-        if model.output_shape[-1] != len(MODEL_OUTPUT_LABELS):
-            print(f"WARNING: Model output layer size ({model.output_shape[-1]}) does not match number of defined labels ({len(MODEL_OUTPUT_LABELS)}).")
-        print(f"Server Startup: Successfully loaded model from {MODEL_PATH}")
-    except Exception as e:
-        print(f"Server Startup Error: Could not load model. Ensure path is correct. Error: {e}")
-        model = None # Set to None to indicate failure
+#     # 1. Load the model
+#     try:
+#         model = tf.keras.models.load_model(MODEL_PATH)
+#         # Optional: Check model output shape to confirm it matches expectations
+#         # print(f"Model output shape: {model.output_shape}")
+#         if model.output_shape[-1] != len(MODEL_OUTPUT_LABELS):
+#             print(f"WARNING: Model output layer size ({model.output_shape[-1]}) does not match number of defined labels ({len(MODEL_OUTPUT_LABELS)}).")
+#         print(f"Server Startup: Successfully loaded model from {MODEL_PATH}")
+#     except Exception as e:
+#         print(f"Server Startup Error: Could not load model. Ensure path is correct. Error: {e}")
+#         model = None # Set to None to indicate failure
 
-    # 2. Load the scalers using the function from preprocessing.py
-    # This also sets the global scaler variables within preprocessing.py
-    scalers_loaded_successfully = load_scalers()
-    if not scalers_loaded_successfully:
-        print("Server Startup Error: Failed to load preprocessing scalers. API will be degraded.")
-        # In a production environment, you might want to raise an exception here
-        # to prevent the server from starting if essential preprocessing assets can't be loaded.
+#     # 2. Load the scalers using the function from preprocessing.py
+#     # This also sets the global scaler variables within preprocessing.py
+#     scalers_loaded_successfully = load_scalers()
+#     if not scalers_loaded_successfully:
+#         print("Server Startup Error: Failed to load preprocessing scalers. API will be degraded.")
+#         # In a production environment, you might want to raise an exception here
+#         # to prevent the server from starting if essential preprocessing assets can't be loaded.
 
-# --- API Endpoint ---
-@app.post("/predict")
-async def predict_injury_risk(
-    video: UploadFile = File(...),
-    metadata: str = Form(...) # Metadata sent as a JSON string in a form field
-):
-    """
-    Receives a video file and user metadata, processes them, and returns an injury risk prediction.
-    """
-    # 1. Validate loaded assets
-    if model is None:
-        raise HTTPException(status_code=500, detail="Model not loaded. Server not ready.")
-    # Preprocessing functions will check their internal scalers.
+# # --- API Endpoint ---
+# @app.post("/predict")
+# async def predict_injury_risk(
+#     video: UploadFile = File(...),
+#     metadata: str = Form(...) # Metadata sent as a JSON string in a form field
+# ):
+#     """
+#     Receives a video file and user metadata, processes them, and returns an injury risk prediction.
+#     """
+#     # 1. Validate loaded assets
+#     if model is None:
+#         raise HTTPException(status_code=500, detail="Model not loaded. Server not ready.")
+#     # Preprocessing functions will check their internal scalers.
 
-    # 2. Parse Metadata
-    try:
-        metadata_dict = json.loads(metadata)
-        user_meta = UserMetadata(**metadata_dict) # Validate with Pydantic model
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid metadata JSON format.")
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid metadata provided: {e}")
+#     # 2. Parse Metadata
+#     try:
+#         metadata_dict = json.loads(metadata)
+#         user_meta = UserMetadata(**metadata_dict) # Validate with Pydantic model
+#     except json.JSONDecodeError:
+#         raise HTTPException(status_code=400, detail="Invalid metadata JSON format.")
+#     except Exception as e:
+#         raise HTTPException(status_code=400, detail=f"Invalid metadata provided: {e}")
 
-    # 3. Save Video to a Temporary File
-    temp_video_path = None
-    try:
-        suffix_map = {
-            "video/mp4": ".mp4",
-            "video/quicktime": ".mov",
-            "video/x-msvideo": ".avi",
-        }
-        file_suffix = suffix_map.get(video.content_type, ".mp4") # Default to .mp4
+#     # 3. Save Video to a Temporary File
+#     temp_video_path = None
+#     try:
+#         suffix_map = {
+#             "video/mp4": ".mp4",
+#             "video/quicktime": ".mov",
+#             "video/x-msvideo": ".avi",
+#         }
+#         file_suffix = suffix_map.get(video.content_type, ".mp4") # Default to .mp4
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=file_suffix) as temp_file:
-            temp_file.write(await video.read()) # Read bytes from UploadFile and write to temp file
-            temp_video_path = temp_file.name
+#         with tempfile.NamedTemporaryFile(delete=False, suffix=file_suffix) as temp_file:
+#             temp_file.write(await video.read()) # Read bytes from UploadFile and write to temp file
+#             temp_video_path = temp_file.name
 
-        print(f"Backend: Video saved temporarily to: {temp_video_path}")
+#         print(f"Backend: Video saved temporarily to: {temp_video_path}")
 
-        # 4. Extract Angles using angle_processor.py
-        angles_array = get_mediapipe_angles(temp_video_path)
-        print(f"Backend: Extracted angles shape: {angles_array.shape if angles_array.size > 0 else 'Empty'}")
+#         # 4. Extract Angles using angle_processor.py
+#         angles_array = get_mediapipe_angles(temp_video_path)
+#         print(f"Backend: Extracted angles shape: {angles_array.shape if angles_array.size > 0 else 'Empty'}")
 
-        # 5. Preprocess Data for Model using preprocessing.py
-        processed_angles = preprocess_angles(angles_array)
-        processed_metadata = preprocess_metadata(user_meta.age, user_meta.weight, user_meta.height, user_meta.gender)
+#         # 5. Preprocess Data for Model using preprocessing.py
+#         processed_angles = preprocess_angles(angles_array)
+#         processed_metadata = preprocess_metadata(user_meta.age, user_meta.weight, user_meta.height, user_meta.gender)
 
-        # Check if preprocessing produced valid data
-        if processed_angles.size == 0 or np.any(np.isnan(processed_angles)) or \
-           processed_metadata.size == 0 or np.any(np.isnan(processed_metadata)):
-             raise HTTPException(status_code=422, detail="Failed to preprocess video or metadata. Data may be incomplete or invalid after scaling/padding.")
+#         # Check if preprocessing produced valid data
+#         if processed_angles.size == 0 or np.any(np.isnan(processed_angles)) or \
+#            processed_metadata.size == 0 or np.any(np.isnan(processed_metadata)):
+#              raise HTTPException(status_code=422, detail="Failed to preprocess video or metadata. Data may be incomplete or invalid after scaling/padding.")
 
-        print(f"Backend: Preprocessed angles shape: {processed_angles.shape}")
-        print(f"Backend: Preprocessed metadata shape: {processed_metadata.shape}")
+#         print(f"Backend: Preprocessed angles shape: {processed_angles.shape}")
+#         print(f"Backend: Preprocessed metadata shape: {processed_metadata.shape}")
 
-        # 6. Make Prediction ---------------> how do we do this?
-        try:
-            # Ensure input shapes match your model's expected inputs
-            # Assuming model.predict takes a list of inputs: [angles_input, metadata_input]
-            # where angles_input is (batch_size, seq_len, features)
-            # and metadata_input is (batch_size, meta_features)
-            prediction_raw = model.predict([processed_angles, processed_metadata])
+#         # 6. Make Prediction ---------------> how do we do this?
+#         try:
+#             # Ensure input shapes match your model's expected inputs
+#             # Assuming model.predict takes a list of inputs: [angles_input, metadata_input]
+#             # where angles_input is (batch_size, seq_len, features)
+#             # and metadata_input is (batch_size, meta_features)
+#             prediction_raw = model.predict([processed_angles, processed_metadata])
 
-            # Assuming model outputs probabilities for each class (e.g., using softmax in last layer)
-            # prediction_raw will likely be a 2D array: [[prob_class0, prob_class1, ..., prob_class5]]
-            if prediction_raw.ndim == 2 and prediction_raw.shape[0] == 1 and prediction_raw.shape[1] == len(MODEL_OUTPUT_LABELS):
-                predicted_class_index = np.argmax(prediction_raw[0]) # Get index of highest probability
-                predicted_label = MODEL_OUTPUT_LABELS[predicted_class_index]
-                # Get the confidence for the predicted label
-                confidence = float(prediction_raw[0][predicted_class_index])
-                all_class_probabilities = prediction_raw[0].tolist() # Convert probabilities to a list for JSON
+#             # Assuming model outputs probabilities for each class (e.g., using softmax in last layer)
+#             # prediction_raw will likely be a 2D array: [[prob_class0, prob_class1, ..., prob_class5]]
+#             if prediction_raw.ndim == 2 and prediction_raw.shape[0] == 1 and prediction_raw.shape[1] == len(MODEL_OUTPUT_LABELS):
+#                 predicted_class_index = np.argmax(prediction_raw[0]) # Get index of highest probability
+#                 predicted_label = MODEL_OUTPUT_LABELS[predicted_class_index]
+#                 # Get the confidence for the predicted label
+#                 confidence = float(prediction_raw[0][predicted_class_index])
+#                 all_class_probabilities = prediction_raw[0].tolist() # Convert probabilities to a list for JSON
 
-            else:
-                # Handle unexpected model output shape
-                predicted_label = "Prediction Error: Unexpected model output shape."
-                confidence = 0.0
-                all_class_probabilities = []
-                print(f"Backend Warning: Unexpected model output shape: {prediction_raw.shape}")
+#             else:
+#                 # Handle unexpected model output shape
+#                 predicted_label = "Prediction Error: Unexpected model output shape."
+#                 confidence = 0.0
+#                 all_class_probabilities = []
+#                 print(f"Backend Warning: Unexpected model output shape: {prediction_raw.shape}")
 
 
-            return JSONResponse(content={
-                "message": "Video analyzed and prediction made successfully.",
-                "prediction": predicted_label, # The human-readable label
-                "confidence": confidence,     # Confidence for the predicted label
-                "all_class_probabilities": all_class_probabilities, # All probabilities for insight
-                "details": {
-                    "angles_input_shape": processed_angles.shape,
-                    "metadata_input_shape": processed_metadata.shape,
-                    # "raw_model_output": prediction_raw.tolist() # Can include full raw output if needed for debugging
-                }
-            })
+#             return JSONResponse(content={
+#                 "message": "Video analyzed and prediction made successfully.",
+#                 "prediction": predicted_label, # The human-readable label
+#                 "confidence": confidence,     # Confidence for the predicted label
+#                 "all_class_probabilities": all_class_probabilities, # All probabilities for insight
+#                 "details": {
+#                     "angles_input_shape": processed_angles.shape,
+#                     "metadata_input_shape": processed_metadata.shape,
+#                     # "raw_model_output": prediction_raw.tolist() # Can include full raw output if needed for debugging
+#                 }
+#             })
 
-        except Exception as model_err:
-            print(f"Backend Error: An error occurred during model prediction: {model_err}")
-            raise HTTPException(status_code=500, detail=f"Error during model prediction: {model_err}. Check model inputs and output interpretation.")
+#         except Exception as model_err:
+#             print(f"Backend Error: An error occurred during model prediction: {model_err}")
+#             raise HTTPException(status_code=500, detail=f"Error during model prediction: {model_err}. Check model inputs and output interpretation.")
 
-    except Exception as e:
-        print(f"Backend Error: Internal server error during processing: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
+#     except Exception as e:
+#         print(f"Backend Error: Internal server error during processing: {e}")
+#         raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
 
-    finally:
-        # 7. Clean up the temporary video file
-        if temp_video_path and os.path.exists(temp_video_path):
-            os.unlink(temp_video_path)
-            print(f"Backend: Cleaned up temporary video file: {temp_video_path}")
+#     finally:
+#         # 7. Clean up the temporary video file
+#         if temp_video_path and os.path.exists(temp_video_path):
+#             os.unlink(temp_video_path)
+#             print(f"Backend: Cleaned up temporary video file: {temp_video_path}")
 
 
 # # --- Health Check Endpoint ---
