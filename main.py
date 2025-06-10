@@ -125,7 +125,7 @@ async def predict_injury_risk(
         print(f"Backend: Preprocessed angles shape: {processed_angles.shape}")
         print(f"Backend: Preprocessed metadata shape: {processed_metadata.shape}")
 
-        # 6. Make Prediction
+        # 6. Make Prediction ---------------> how do we do this?
         try:
             # Ensure input shapes match your model's expected inputs
             # Assuming model.predict takes a list of inputs: [angles_input, metadata_input]

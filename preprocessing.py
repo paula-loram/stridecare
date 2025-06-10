@@ -154,8 +154,11 @@ def preprocess_angles(raw_angles_array: np.array) -> np.array:
     # Handle division by zero for NaN or zero values by ensuring 180.0 is float
     standardized_angles = temp_angles / 180.0
 
+    #Round to 8 decimal points to match training
+    rounded_angles = np.round(standardized_angles, 8)
+
     # 2. Imputation: Fill any remaining NaNs
-    processed_angles = np.nan_to_num(standardized_angles, nan=0.0) # Using 0.0 as a common default
+    processed_angles = np.nan_to_num(rounded_angles, nan=0.0) # Using 0.0 as a common default
 
     # 3. Padding/Truncation: Ensure sequence length matches RNN_SEQUENCE_LENGTH
     if processed_angles.shape[0] > RNN_SEQUENCE_LENGTH:
