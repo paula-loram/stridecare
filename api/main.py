@@ -13,7 +13,7 @@ import tensorflow as tf
 
 # --- Import your custom modules ---
 from video_angle_processor import get_mediapipe_angles
-from preprocessing import load_scalers, preprocess_angles, preprocess_metadata
+from api.preprocessing import load_scalers, preprocess_angles, preprocess_metadata
 
 # --- Configuration & Model Path ---
 MODEL_PATH = "./RNN/my_model_weights.weights.h5"
@@ -182,7 +182,7 @@ async def health_check():
     """Returns a simple health check status, indicating if model and scalers are loaded."""
     # Note: `angles_scaler` and `metadata_scaler` here are references to global
     # variables in `preprocessing.py`. Their state is managed by `preprocessing.load_scalers()`.
-    from preprocessing import ohe_scaler, numerical_metadata_scaler # Specific scalers from preprocessing.py
+    from api.preprocessing import ohe_scaler, numerical_metadata_scaler # Specific scalers from preprocessing.py
     status = "healthy"
     detail = "All assets loaded."
 
