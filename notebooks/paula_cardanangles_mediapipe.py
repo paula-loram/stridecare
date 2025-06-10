@@ -199,7 +199,7 @@ mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
 
 # --- Main processing ---
-video_path = 'raw_data/runner_vid.mp4'  # <<< REPLACE WITH YOUR VIDEO FILE PATH
+video_path = 'data/runner_vid.mp4'  # <<< REPLACE WITH YOUR VIDEO FILE PATH
 cap = cv2.VideoCapture(video_path)
 
 if not cap.isOpened():
