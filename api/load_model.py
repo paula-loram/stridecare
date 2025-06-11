@@ -1,6 +1,6 @@
 from tensorflow.keras.layers import Input, LSTM, Dense, Dropout, Concatenate
 from tensorflow.keras.models import Model
-
+import os
 
 def build_model():
     # Time-series input (angles)
@@ -26,7 +26,6 @@ def build_model():
 
 
 from google.cloud import storage
-from google.cloud import storage
 
 def download_blob(bucket_name, source_blob_name, destination_file_name):
     """Downloads a blob from the bucket."""
@@ -37,19 +36,24 @@ def download_blob(bucket_name, source_blob_name, destination_file_name):
     print(f"Downloaded {source_blob_name} to {destination_file_name}")
 
 
-download_blob(
-    bucket_name='stridecare-models',
-    source_blob_name='models/my_model_weights.weights.h5',
-    destination_file_name='local_model_weights.h5'
-)
+# download_blob(
+#     bucket_name='stridecare-models',
+#     source_blob_name='models/my_model_weights.weights.h5',
+#     destination_file_name='local_model_weights.h5'
+# )
 
 def load_model():
     model = build_model()
-    download_blob(
-    bucket_name='stridecare-models',
-    source_blob_name='models/my_model_weights.weights.h5',
-    destination_file_name='local_model_weights.h5'
-)
-    model.load_weights('local_model_weights.h5')
+    # load weights locally if available
+    local_weights = 'local_model_weights.weights.h5'
+
+    if not os.path.exists(local_weights):
+        print(f"Local weights file {local_weights} not found. Downloading from GCS...")
+        download_blob(
+            bucket_name='stridecare-models',
+            source_blob_name='models/my_model_weights.weights.h5',
+            destination_file_name=local_weights
+        )
+    model.load_weights(local_weights)
 
     return model
