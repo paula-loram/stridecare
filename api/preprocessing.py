@@ -127,70 +127,70 @@ def preprocess_metadata(age: int, height: float, weight: float, gender: str) -> 
     # For a single inference, batch_size is 1, so the shape is already (1, num_features).
     return processed_meta
 
-def preprocess_angles(raw_angles_df: pd.DataFrame) -> np.array:
+import numpy as np
+
+def preprocess_angles(raw_angles_list: list) -> np.array:
     """
-    Takes an angle.df given by get_stickfigure.py, ensures there are 6000 frames,
-    standardizes by dividing them all by 180, then transposes the df to have an
-    angle array (which will be concatenated with the metadata in main.py).
+    Takes a list of angle rows (from get_stickfigure.py), ensures there are 6000 frames,
+    standardizes by dividing them all by 180, then transposes the array to match the
+    RNN input shape.
 
     Args:
-        raw_angles.df (pd.DataFrame): Raw angles data (num_frames, num_features)
-                                     from get_stickfigure.
+        raw_angles_list (list): Raw angles data as list of lists (num_frames, num_features).
 
     Returns:
         np.array: Preprocessed angles ready for the RNN model,
                   reshaped to (1, num_features, RNN_SEQUENCE_LENGTH).
-                  Returns 999.0/180 = 5.55 for NAs (as coded as 999.0 in get_stickfigure).
+                  Returns 999.0/180 = 5.55 for missing values (coded as 999.0).
     """
 
-    #change .df into array:
+    num_expected_features = 10  # 2 pelvis, 4 hips, 4 knees
+    RNN_SEQUENCE_LENGTH = 6000  # make sure this matches your model's expected length
 
-    raw_angles_array = raw_angles_df.to_numpy()
-    num_expected_features = 10 # 2pelvis, 4 hips, 4 knees
+    # Convert list to NumPy array
+    raw_angles_array = np.array(raw_angles_list)
 
-
-    # If no angle data was extracted for the video, create a NaN array for processing
+    # If no angle data was extracted
     if raw_angles_array.size == 0:
         print("Preprocessing: No raw angle data found; creating a NaN-filled sequence.")
         temp_angles = np.full((RNN_SEQUENCE_LENGTH, num_expected_features), np.nan)
     else:
-        # Ensure raw_angles.df has the expected number of columns for robust operation
+        # Ensure correct number of columns (features)
         if raw_angles_array.shape[1] != num_expected_features:
             print(f"Warning: Raw angles array has {raw_angles_array.shape[1]} features, expected {num_expected_features}. Adjusting or padding.")
-            # Create a new array and fill with NaNs, then copy valid columns
             adjusted_angles = np.full((raw_angles_array.shape[0], num_expected_features), np.nan)
             min_cols = min(raw_angles_array.shape[1], num_expected_features)
             adjusted_angles[:, :min_cols] = raw_angles_array[:, :min_cols]
             temp_angles = adjusted_angles
         else:
-            temp_angles = raw_angles_array.copy() # Work on a copy to avoid modifying original
+            temp_angles = raw_angles_array.copy()
 
-    #1. Round to 8 decimal points to match training data
+    # Step 1: Round to 8 decimal points
     rounded_angles = np.round(temp_angles, 8)
 
-    #2. Fill any remaining NaNs with 999.0
-    processed_angles = np.nan_to_num(rounded_angles, nan = 999.0)
+    # Step 2: Replace NaNs with 999.0 (your missing value code)
+    processed_angles = np.nan_to_num(rounded_angles, nan=999.0)
 
-    #3. standardize by dividing by 180 each value
-    standardized_angles = processed_angles / 180
+    # Step 3: Standardize
+    standardized_angles = processed_angles / 180.0
 
-    #4. Padding/Truncation: Ensure sequence length matches RNN_SEQUENCE_LENGTH
-    if standardized_angles.shape[0] > RNN_SEQUENCE_LENGTH: #if more that 6000 frames, cut there
+    # Step 4: Pad or truncate to 6000 frames
+    if standardized_angles.shape[0] > RNN_SEQUENCE_LENGTH:
         standardized_angles = standardized_angles[:RNN_SEQUENCE_LENGTH, :]
     else:
-        # Pad with zeros to reach 6000 frames
-        # Matches the training data padding strategy (post-padding)
         padding_needed = RNN_SEQUENCE_LENGTH - standardized_angles.shape[0]
+        standardized_angles = np.pad(
+            standardized_angles,
+            ((0, padding_needed), (0, 0)),
+            mode='constant',
+            constant_values=0.0
+        )
 
-        standardized_angles = np.pad(standardized_angles,
-                                  ((0, padding_needed), (0, 0)),
-                                  mode='constant', constant_values=0.0)
-
-    #5. Transposing: to match training shape = (num_features : num_frames)
+    # Step 5: Transpose to (num_features, num_frames)
     transposed_angles = standardized_angles.T
 
-    #6. Add dimension to match what goes into model
+    # Step 6: Add batch dimension for model input: (1, num_features, num_frames)
     model_ready_angles = transposed_angles[np.newaxis, :, :]
 
-
     return model_ready_angles
+
