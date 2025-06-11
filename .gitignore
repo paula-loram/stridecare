@@ -38,3 +38,6 @@ pytestdebug.log
 
 # RNN too large to get in github
 RNN/training_checkpoints/*.weights.h5
+
+# PyCache
+__pycache__
