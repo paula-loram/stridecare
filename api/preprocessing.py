@@ -5,9 +5,10 @@
 
 import numpy as np
 import pandas as pd
-import joblib # To load pre-trained scikit-learn scalers
+import pickle # Use pickle instead of joblib
 import os
 from google.cloud import storage
+import sklearn
 
 
 # --- Configuration ---
@@ -22,8 +23,8 @@ blob_num = bucket.blob('scalers/scaler.pkl') if bucket else None
 
 GCS_SCALERS_PREFIX = 'scalers/' #delete?
 SCALERS_DIR = "gs://stridecare-models/scalers/" #GCS file path
-CAT_METADATA_SCALER_FILENAME = "ohe.pkl" # For OneHotEncoder for gender
-NUML_METADATA_SCALER_FILENAME = "scaler.pkl" # For StandardScaler for age, weight, height
+CAT_METADATA_SCALER_FILENAME = "api/ohe.pkl" # For OneHotEncoder for gender
+NUML_METADATA_SCALER_FILENAME = "api/scaler.pkl" # For StandardScaler for age, weight, height
 
 # Fixed frame length for the RNN
 RNN_SEQUENCE_LENGTH = 6000 # PADDING FOR FRAMES
@@ -34,23 +35,24 @@ numerical_metadata_scaler = None
 
 def load_scalers():
     """
-    Loads pre-trained scikit-learn scalers from disk.
+    Loads pre-trained scikit-learn scalers from disk using pickle.
     This function should be called once at application startup.
     """
-    global cat_metadata_scaler, numerical_metadata_scaler
     try:
-        cat_metadata_scaler_path = os.path.join(SCALERS_DIR, CAT_METADATA_SCALER_FILENAME)
-        numerical_metadata_scaler_path = os.path.join(SCALERS_DIR, NUML_METADATA_SCALER_FILENAME)
+        # cat_metadata_scaler_path = os.path.join(SCALERS_DIR, CAT_METADATA_SCALER_FILENAME)
+        # numerical_metadata_scaler_path = os.path.join(SCALERS_DIR, NUML_METADATA_SCALER_FILENAME)
 
-        if not os.path.exists(cat_metadata_scaler_path):
-            raise FileNotFoundError(f"OneHotEncoder scaler not found at: {cat_metadata_scaler_path}")
-        if not os.path.exists(numerical_metadata_scaler_path):
-            raise FileNotFoundError(f"Numerical metadata scaler not found at: {numerical_metadata_scaler_path}")
+        # if not os.path.exists(cat_metadata_scaler_path):
+        #     raise FileNotFoundError(f"OneHotEncoder scaler not found at: {cat_metadata_scaler_path}")
+        # if not os.path.exists(numerical_metadata_scaler_path):
+        #     raise FileNotFoundError(f"Numerical metadata scaler not found at: {numerical_metadata_scaler_path}")
 
-        cat_metadata_scaler = joblib.load(cat_metadata_scaler_path)
-        numerical_metadata_scaler = joblib.load(numerical_metadata_scaler_path)
-        print("Preprocessing: Successfully loaded OneHotEncoder and numerical metadata scalers.")
-        return True
+        with open(CAT_METADATA_SCALER_FILENAME, 'rb') as f:
+            cat_metadata_scaler = pickle.load(f)
+        with open(NUML_METADATA_SCALER_FILENAME, 'rb') as f:
+            numerical_metadata_scaler = pickle.load(f)
+        print("Preprocessing: Successfully loaded OneHotEncoder and numerical metadata scalers (pickle).")
+        return cat_metadata_scaler, numerical_metadata_scaler
 
     except Exception as e:
         print(f"Preprocessing Error: Could not load scalers. Ensure paths are correct and files exist. Error: {e}")
@@ -74,6 +76,7 @@ def preprocess_metadata(age: int, height: float, weight: float, gender: str) -> 
                   reshaped to (1, num_meta_features).
                   Returns an array of NaNs if scalers are not loaded.
     """
+    cat_metadata_scaler, numerical_metadata_scaler = load_scalers()
     if numerical_metadata_scaler is None or cat_metadata_scaler is None:
         print("Preprocessing: Metadata scalers not loaded. Cannot preprocess metadata.")
         # Return a NaN-filled array with expected number of metadata features
@@ -107,7 +110,7 @@ def preprocess_metadata(age: int, height: float, weight: float, gender: str) -> 
 
     try:
         # .toarray() converts sparse matrix output to dense numpy array
-        encoded_gender = cat_metadata_scaler.transform(gender_input_for_ohe).toarray()
+        encoded_gender = cat_metadata_scaler.transform(gender_input_for_ohe)#.toarray()
     except ValueError as e:
         # Handle unseen gender categories during inference.
         # If a gender is encountered that wasn't in training, OHE will raise an error.
@@ -193,4 +196,3 @@ def preprocess_angles(raw_angles_list: list) -> np.array:
     model_ready_angles = transposed_angles[np.newaxis, :, :]
 
     return model_ready_angles
-

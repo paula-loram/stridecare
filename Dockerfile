@@ -1,5 +1,5 @@
-FROM python:3.10.6-slim
-COPY stridecare /stridecare
+FROM tensorflow/tensorflow:2.16.1
+COPY api /api
 COPY requirements.txt /requirements.txt
 RUN pip install -r requirements.txt
-CMD uvicorn api.paula_dummy_main:app --host 0.0.0.0 --port $PORT
+CMD uvicorn api.main:app --host 0.0.0.0 --port $PORT

@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import shutil
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
+from fastapi import Body
 from pydantic import BaseModel
 from typing import Literal
 from starlette.responses import JSONResponse, StreamingResponse
@@ -17,6 +18,7 @@ import base64
 from api.video_angle_processor import get_mediapipe_angles
 from api.preprocessing import load_scalers, preprocess_angles, preprocess_metadata
 from api.get_stickfigure import get_stickfigure
+from api.load_model import load_model
 
 # --- Configuration & Model Path ---
 #will be bucket
@@ -47,6 +49,8 @@ app = FastAPI(
     description="API for video-based injury risk prediction using MediaPipe and RNN.",
     version="1.0.0"
 )
+app.state.model = load_model()  # Load the model at startup
+# app.state.cat_metadata_scaler, app.state.numerical_metadata_scaler = load_scalers()  # Load the scalers at startup
 
 @app.get("/")
 def root():
@@ -55,7 +59,7 @@ def root():
     }
 
 @app.post("/get_stick_fig_video")
-async def upload_video(background_tasks: BackgroundTasks, video: UploadFile = File(...), data: str = Form(...)):
+async def upload_video(background_tasks: BackgroundTasks, video: UploadFile = File(...)):
     """
     Receives a video file, saves it temporarily, and then
     starts a background task to process it with MediaPipe.
@@ -125,6 +129,59 @@ async def upload_video(background_tasks: BackgroundTasks, video: UploadFile = Fi
             os.remove(temp_file_path)
         return JSONResponse(status_code=500, content={"message": f"Failed to save video: {e}"})
 
+@app.post("/predict")
+async def predict_injury_risk(
+    data: dict = Body(...)
+):
+    model = app.state.model
+    # cat_metadata_scaler = app.state.cat_metadata_scaler
+    # numerical_metadata_scaler = app.state.numerical_metadata_scaler
+    if model is None:
+        raise HTTPException(status_code=500, detail="Model not loaded. Server not ready.")
+
+    try:
+        # angles_array = np.array(data["angles"], dtype=np.float32)
+        user_meta = UserMetadata(
+            age=data["age"],
+            weight=data["weight"],
+            height=data["height"],
+            gender=data["gender"]
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid input data: {e}")
+
+    # Preprocess angles and metadata
+    processed_angles = preprocess_angles(data["angles"])
+    processed_metadata = preprocess_metadata(user_meta.age, user_meta.weight, user_meta.height, user_meta.gender)
+
+    if processed_angles.size == 0 or np.any(np.isnan(processed_angles)) or \
+       processed_metadata.size == 0 or np.any(np.isnan(processed_metadata)):
+        raise HTTPException(status_code=422, detail="Failed to preprocess angles or metadata. Data may be incomplete or invalid after scaling/padding.")
+
+    # Make prediction
+    prediction_raw = model.predict([processed_angles, processed_metadata])
+    print(f"Backend: Raw model prediction: {prediction_raw}")
+    if prediction_raw.ndim == 2 and prediction_raw.shape[0] == 1 and prediction_raw.shape[1] == len(MODEL_OUTPUT_LABELS):
+        predicted_class_index = np.argmax(prediction_raw[0])
+        predicted_label = MODEL_OUTPUT_LABELS[predicted_class_index]
+        confidence = float(prediction_raw[0][predicted_class_index])
+        all_class_probabilities = prediction_raw[0].tolist()
+    else:
+        predicted_label = "Prediction Error: Unexpected model output shape."
+        confidence = 0.0
+        all_class_probabilities = []
+        print(f"Backend Warning: Unexpected model output shape: {prediction_raw.shape}")
+
+    return JSONResponse(content={
+        "message": "Angles analyzed and prediction made.",
+        "prediction": predicted_label,
+        "confidence": confidence,
+        "all_class_probabilities": all_class_probabilities,
+        "details": {
+            "angles_input_shape": processed_angles.shape,
+            "metadata_input_shape": processed_metadata.shape,
+        }
+    })
 
 # --- FastAPI Startup Event: Load Model and Scalers ---
 # @app.on_event("startup")
