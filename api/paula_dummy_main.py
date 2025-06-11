@@ -52,7 +52,7 @@ async def startup_event():
     global model
     # Load the model
     try:
-        model = tf.keras.models.load_model(MODEL_PATH)
+        model = tf.keras.models.load_model(MODEL_PATH) #MAKE FUNCTION TO CREATE MODEL : EMPTY THEN FIT WEIGHTS (NO COMPILE OR TRAIN, MODEL LOAD WEIGHTS)
         if model.output_shape[-1] != len(MODEL_OUTPUT_LABELS):
             print(f"WARNING: Model output layer size ({model.output_shape[-1]}) "
                   f"does not match number of defined labels ({len(MODEL_OUTPUT_LABELS)}).")
@@ -102,7 +102,7 @@ async def upload_video(background_tasks: BackgroundTasks, video: UploadFile = Fi
     os.makedirs(TEMP_VIDEO_DIR, exist_ok=True)
 
     temp_file_path = os.path.join(TEMP_VIDEO_DIR, video.filename)
-    
+
     try:
         with open(temp_file_path, "wb") as buffer:
             shutil.copyfileobj(video.file, buffer)
