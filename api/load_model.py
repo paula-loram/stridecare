@@ -1,6 +1,7 @@
 from tensorflow.keras.layers import Input, LSTM, Dense, Dropout, Concatenate
 from tensorflow.keras.models import Model
 
+
 def build_model():
     # Time-series input (angles)
     time_input = Input(shape=(10, 6000), name='time_series_input')
@@ -41,3 +42,14 @@ download_blob(
     source_blob_name='models/my_model_weights.weights.h5',
     destination_file_name='local_model_weights.h5'
 )
+
+def load_model():
+    model = build_model()
+    download_blob(
+    bucket_name='stridecare-models',
+    source_blob_name='models/my_model_weights.weights.h5',
+    destination_file_name='local_model_weights.h5'
+)
+    model.load_weights('local_model_weights.h5')
+
+    return model

@@ -16,6 +16,7 @@ from google.cloud import storage
 from video_angle_processor import get_mediapipe_angles
 from api.preprocessing import load_scalers, preprocess_angles, preprocess_metadata
 from api.preprocessing import cat_metadata_scaler, numerical_metadata_scaler  # to check scaler status in health check
+from load_model import load_model
 
 # --- Configuration & Model Path ---
 MODEL_PATH = "./RNN/my_model_weights.weights.h5" #----------> get bucket address
@@ -47,25 +48,8 @@ app = FastAPI(
     version="1.0.0"
 )
 
-
-@app.on_event("startup")
-async def startup_event():
-    global model
-    # Load the model
-    try:
-        model = tf.keras.models.load_model(MODEL_PATH) #MAKE FUNCTION TO CREATE MODEL : EMPTY THEN FIT WEIGHTS (NO COMPILE OR TRAIN, MODEL LOAD WEIGHTS)
-        if model.output_shape[-1] != len(MODEL_OUTPUT_LABELS):
-            print(f"WARNING: Model output layer size ({model.output_shape[-1]}) "
-                  f"does not match number of defined labels ({len(MODEL_OUTPUT_LABELS)}).")
-        print(f"Server Startup: Successfully loaded model from {MODEL_PATH}")
-    except Exception as e:
-        print(f"Server Startup Error: Could not load model. Error: {e}")
-        model = None
-
-    # Load scalers
-    scalers_loaded_successfully = load_scalers()
-    if not scalers_loaded_successfully:
-        print("Server Startup Error: Failed to load preprocessing scalers. API functionality may be degraded.")
+app.state.model = load_model()
+app.state.scalers = load_scalers()
 
 @app.get("/")
 def root():
@@ -124,6 +108,9 @@ async def predict_injury_risk(
     video: UploadFile = File(...),
     metadata: str = Form(...)
 ):
+
+    model = app.state.model #------> load model
+    scalers = app.state.scalers #------> load scalers from above
     if model is None:
         raise HTTPException(status_code=500, detail="Model not loaded. Server not ready.")
 
