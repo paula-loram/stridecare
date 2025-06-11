@@ -2,4 +2,4 @@ FROM python:3.10.6-slim
 COPY stridecare /stridecare
 COPY requirements.txt /requirements.txt
 RUN pip install -r requirements.txt
-CMD uvicorn api.dummy_main:app --host 0.0.0.0 --port $PORT
+CMD uvicorn api.paula_dummy_main:app --host 0.0.0.0 --port $PORT

@@ -5,23 +5,23 @@ import tempfile
 import json
 import numpy as np
 import pandas as pd
-import shutil
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from pydantic import BaseModel
 from typing import Literal
-from starlette.responses import JSONResponse, StreamingResponse
+from starlette.responses import JSONResponse
 import tensorflow as tf
-import base64
 
-# --- Import your custom modules ---
+# --- Imported custom modules ---
 from api.video_angle_processor import get_mediapipe_angles
+# from video_angle_processor import get_mediapipe_angles #-------> do we need them if they are contained in other functions?
+# Old location - Leo
 from api.preprocessing import load_scalers, preprocess_angles, preprocess_metadata
 from api.get_stickfigure import get_stickfigure
 
 # --- Configuration & Model Path ---
 #will be bucket
 MODEL_PATH = "./RNN/my_model_weights.weights.h5"
-TEMP_VIDEO_DIR = "temp_videos"
+
 # Global variable for the loaded model
 model = None
 
@@ -54,78 +54,6 @@ def root():
         'status' : 'backend up!'
     }
 
-@app.post("/get_stick_fig_video")
-async def upload_video(background_tasks: BackgroundTasks, video: UploadFile = File(...), data: str = Form(...)):
-    """
-    Receives a video file, saves it temporarily, and then
-    starts a background task to process it with MediaPipe.
-    """
-    # return file name and content type
-    if not video:
-        return JSONResponse(status_code=400, content={"message": "No video file uploaded."})
-    # Check if the uploaded file is a video
-    if not video.filename:
-        return JSONResponse(status_code=400, content={"message": "No filename provided."})
-    if not video.content_type:
-        return JSONResponse(status_code=400, content={"message": "No content type provided."})
-    # Ensure the content type is a video format
-    if not video.filename.lower().endswith(('.mp4', '.mov', '.avi', '.mkv', '.flv')):
-        return JSONResponse(status_code=400, content={"message": "Unsupported video format. Please upload a valid video file."})
-
-    os.makedirs(TEMP_VIDEO_DIR, exist_ok=True)
-    temp_file_path = os.path.join(TEMP_VIDEO_DIR, video.filename)
-    output_file_path = os.path.join(TEMP_VIDEO_DIR, f"stickfig_{video.filename}")
-
-    try:
-        with open(temp_file_path, "wb") as buffer:
-            shutil.copyfileobj(video.file, buffer)
-
-        # Process the video to generate stick figure video
-        stickfig_path, angles_array = get_stickfigure(temp_file_path, output_file_path)
-
-        # Check if the stick figure video was generated and is not empty
-        # if not os.path.exists(stickfig_path) or os.path.getsize(stickfig_path) == 0:
-        #     return JSONResponse(status_code=500, content={"message": "Stick figure video was not generated or is empty."})
-        with open(stickfig_path, "rb") as f:
-            video_bytes = f.read()
-            video_b64 = base64.b64encode(video_bytes).decode("utf-8")
-        # Convert angles_array to list for JSON serialization
-        # angles_list = angles_array.tolist() if hasattr(angles_array, "tolist") else angles_array
-
-
-        # Replace NaN and inf with 999. for JSON serialization
-        angles_clean = np.where(np.isnan(angles_array), 999., angles_array)
-        angles_clean = np.where(np.isinf(angles_clean), 999., angles_clean)
-        angles_list = angles_clean.tolist()
-
-        return JSONResponse(status_code=200, content={
-            "message": "Stick figure video generated successfully.",
-            "filename": os.path.basename(stickfig_path),
-            "video_base64": video_b64,
-            "content_type": "video/mp4",
-            "angles_array": angles_list
-        })
-
-        # def iterfile(file_path):
-        #     with open(file_path, "rb") as file_like:
-        #         while True:
-        #             chunk = file_like.read(1024 * 1024)
-        #             if not chunk:
-        #                 break
-        #             yield chunk
-        # # start a background task to run model prediction using angle_data_list and data TODO
-        # print(angles_array)
-        # return StreamingResponse(
-        #     iterfile(stickfig_path),
-        #     media_type="video/mp4",
-        #     headers={"Content-Disposition": f"attachment; filename=stickfig_{video.filename}"}
-        # )
-    except Exception as e:
-        if os.path.exists(temp_file_path):
-            os.remove(temp_file_path)
-        return JSONResponse(status_code=500, content={"message": f"Failed to save video: {e}"})
-
-
 # --- FastAPI Startup Event: Load Model and Scalers ---
 # @app.on_event("startup")
 # async def startup_event():
@@ -152,9 +80,53 @@ async def upload_video(background_tasks: BackgroundTasks, video: UploadFile = Fi
 #         # In a production environment, you might want to raise an exception here
 #         # to prevent the server from starting if essential preprocessing assets can't be loaded.
 
+# --- API Endpoint for Stick Figure Generation ---
+@app.post("/generate_stickfigure")
+async def generate_stickfigure_api(video: UploadFile = File(...)):
+    """
+    Receives a video file, generates a stick figure representation with MediaPipe Pose,
+    and returns the base64 encoded stick figure video.
+    """
+    temp_video_path = None
+    stick_figure_output_path = None
+    encoded_stick_figure_video = ""
+
+    try:
+        # Save the uploaded video to a temporary file
+        suffix_map = { "video/mp4": ".mp4", "video/quicktime": ".mov", "video/x-msvideo": ".avi", }
+        file_suffix = suffix_map.get(video.content_type, ".mp4")
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_suffix) as temp_file:
+            temp_file.write(await video.read())
+            temp_video_path = temp_file.name
+        print(f"Backend (/generate_stickfigure): Original video saved temporarily to: {temp_video_path}")
+
+        # Define output path for the stick figure video
+        stick_figure_output_path = temp_video_path + "_stickfigure.mp4"
+
+        # Call the get_stickfigure_video function
+        generated_path = get_stickfigure( #temo_file_path, video.filename
+            video_path=temp_video_path,
+            output_path=stick_figure_output_path
+        )
+
+        if generated_path and os.path.exists(generated_path):
+            print(f"Backend (/generate_stickfigure): Stick figure video generated to: {generated_path}")
+            # Read the generated video bytes and base64 encode them
+            with open(generated_path, "rb") as video_file_bytes:
+                encoded_stick_figure_video = base64.b64encode(video_file_bytes.read()).decode('utf-8')
+        else:
+            print("Backend (/generate_stickfigure) Warning: Failed to generate stick figure video.")
+            raise HTTPException(status_code=500, detail="Failed to generate stick figure video.")
+
+        return JSONResponse(content={
+            "message": "Stick figure video generated successfully.",
+            "stick_figure_video_b64": encoded_stick_figure_video, # Send the base64 encoded video
+        })
+
 # # --- API Endpoint ---
-# @app.post("/predict")
-# async def predict_injury_risk(
+# # @app.post("/predict")
+# # async def predict_injury_risk(
 #     video: UploadFile = File(...),
 #     metadata: str = Form(...) # Metadata sent as a JSON string in a form field
 # ):
