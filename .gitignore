@@ -2,6 +2,12 @@
 .env.yaml
 train_flow-deployment.yaml
 
+#files json processing
+temp_gait_json_files_*
+
+#mediapipe processing examples
+output/
+
 # System files
 .DS_Store
 .ipynb_checkpoints
@@ -29,3 +35,6 @@ training_outputs/
 
 # Other
 pytestdebug.log
+
+# RNN too large to get in github
+RNN/training_checkpoints/*.weights.h5
