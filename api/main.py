@@ -14,9 +14,9 @@ import tensorflow as tf
 import base64
 
 # --- Import your custom modules ---
-from video_angle_processor import get_mediapipe_angles
+from api.video_angle_processor import get_mediapipe_angles
 from api.preprocessing import load_scalers, preprocess_angles, preprocess_metadata
-from get_stickfigure import get_stickfigure
+from api.get_stickfigure import get_stickfigure
 
 # --- Configuration & Model Path ---
 #will be bucket
@@ -55,7 +55,7 @@ def root():
     }
 
 @app.post("/get_stick_fig_video")
-async def upload_video(background_tasks: BackgroundTasks, video: UploadFile = File(...)):
+async def upload_video(background_tasks: BackgroundTasks, video: UploadFile = File(...), data: str = Form(...)):
     """
     Receives a video file, saves it temporarily, and then
     starts a background task to process it with MediaPipe.
@@ -81,39 +81,45 @@ async def upload_video(background_tasks: BackgroundTasks, video: UploadFile = Fi
             shutil.copyfileobj(video.file, buffer)
 
         # Process the video to generate stick figure video
-        stickfig_path = get_stickfigure(temp_file_path, output_file_path)
+        stickfig_path, angles_array = get_stickfigure(temp_file_path, output_file_path)
 
         # Check if the stick figure video was generated and is not empty
-        if not os.path.exists(stickfig_path) or os.path.getsize(stickfig_path) == 0:
-            return JSONResponse(status_code=500, content={"message": "Stick figure video was not generated or is empty."})
+        # if not os.path.exists(stickfig_path) or os.path.getsize(stickfig_path) == 0:
+        #     return JSONResponse(status_code=500, content={"message": "Stick figure video was not generated or is empty."})
         with open(stickfig_path, "rb") as f:
             video_bytes = f.read()
             video_b64 = base64.b64encode(video_bytes).decode("utf-8")
+        # Convert angles_array to list for JSON serialization
+        # angles_list = angles_array.tolist() if hasattr(angles_array, "tolist") else angles_array
 
-        # Optionally, you can remove the temp files here if you want
-        # os.remove(temp_file_path)
-        # os.remove(stickfig_path)
-        # print(video_b64[:100])  # Print first 100 characters of the base64 string for debugging
-        # return JSONResponse(status_code=200, content={
-        #     "message": "Stick figure video generated successfully.",
-        #     "filename": os.path.basename(stickfig_path),
-        #     "video_base64": video_b64,
-        #     "content_type": "video/mp4"
-        # })
 
-        def iterfile(file_path):
-            with open(file_path, "rb") as file_like:
-                while True:
-                    chunk = file_like.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    yield chunk
+        # Replace NaN and inf with 999. for JSON serialization
+        angles_clean = np.where(np.isnan(angles_array), 999., angles_array)
+        angles_clean = np.where(np.isinf(angles_clean), 999., angles_clean)
+        angles_list = angles_clean.tolist()
 
-        return StreamingResponse(
-            iterfile(stickfig_path),
-            media_type="video/mp4",
-            headers={"Content-Disposition": f"attachment; filename=stickfig_{video.filename}"}
-        )
+        return JSONResponse(status_code=200, content={
+            "message": "Stick figure video generated successfully.",
+            "filename": os.path.basename(stickfig_path),
+            "video_base64": video_b64,
+            "content_type": "video/mp4",
+            "angles_array": angles_list
+        })
+
+        # def iterfile(file_path):
+        #     with open(file_path, "rb") as file_like:
+        #         while True:
+        #             chunk = file_like.read(1024 * 1024)
+        #             if not chunk:
+        #                 break
+        #             yield chunk
+        # # start a background task to run model prediction using angle_data_list and data TODO
+        # print(angles_array)
+        # return StreamingResponse(
+        #     iterfile(stickfig_path),
+        #     media_type="video/mp4",
+        #     headers={"Content-Disposition": f"attachment; filename=stickfig_{video.filename}"}
+        # )
     except Exception as e:
         if os.path.exists(temp_file_path):
             os.remove(temp_file_path)

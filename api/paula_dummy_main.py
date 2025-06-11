@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from typing import Literal
 from starlette.responses import JSONResponse
 import tensorflow as tf
-from get_stickfigure import get_stickfigure
+from api.get_stickfigure import get_stickfigure
 import base64
 
 app = FastAPI(
@@ -68,5 +68,3 @@ async def generate_stickfigure_api(video: UploadFile = File(...)):
 @app.post("/predict")
 async def predict_injury(video: UploadFile = File(...),
                          metadata: str = Form(...)): #sent as JSON
-
-    

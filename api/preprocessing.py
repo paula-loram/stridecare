@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import joblib # To load pre-trained scikit-learn scalers
 import os
-from video_angle_processor import get_mediapipe_angles
+from api.video_angle_processor import get_mediapipe_angles
 from google.cloud import storage
 
 
@@ -182,5 +182,5 @@ def preprocess_angles(raw_angles_array: np.array) -> np.array:
         processed_angles = np.pad(processed_angles,
                                   ((0, padding_needed), (0, 0)),
                                   mode='constant', constant_values=0.0)
-        
+
     return processed_angles[np.newaxis, :, :]
