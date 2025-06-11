@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from typing import Literal
 from starlette.responses import JSONResponse
 import tensorflow as tf
+
 import tempfile
 from google.cloud import storage
 
@@ -118,6 +119,7 @@ async def upload_video(background_tasks: BackgroundTasks, video: UploadFile = Fi
         return JSONResponse(status_code=500, content={"message": f"Failed to save video: {e}"})
 
 @app.post("/predict")
+
 async def predict_injury_risk(
     video: UploadFile = File(...),
     metadata: str = Form(...)

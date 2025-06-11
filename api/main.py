@@ -9,12 +9,14 @@ import shutil
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import Literal
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, StreamingResponse
 import tensorflow as tf
+import base64
 
 # --- Import your custom modules ---
-from video_angle_processor import get_mediapipe_angles
+from api.video_angle_processor import get_mediapipe_angles
 from api.preprocessing import load_scalers, preprocess_angles, preprocess_metadata
+from api.get_stickfigure import get_stickfigure
 
 # --- Configuration & Model Path ---
 #will be bucket
@@ -53,7 +55,7 @@ def root():
     }
 
 @app.post("/get_stick_fig_video")
-async def upload_video(background_tasks: BackgroundTasks, video: UploadFile = File(...)):
+async def upload_video(background_tasks: BackgroundTasks, video: UploadFile = File(...), data: str = Form(...)):
     """
     Receives a video file, saves it temporarily, and then
     starts a background task to process it with MediaPipe.
@@ -69,36 +71,56 @@ async def upload_video(background_tasks: BackgroundTasks, video: UploadFile = Fi
     # Ensure the content type is a video format
     if not video.filename.lower().endswith(('.mp4', '.mov', '.avi', '.mkv', '.flv')):
         return JSONResponse(status_code=400, content={"message": "Unsupported video format. Please upload a valid video file."})
-    # Check if the content type is a video
-    if not video.content_type:
-        return JSONResponse(status_code=400, content={"message": "No content type provided."})
-    # if not video.content_type.startswith("video/"):
-    #     return JSONResponse(status_code=400, content={"message": "Uploaded file is not a video."})
-    print(f"Received video: {video.filename}, Content-Type: {video.content_type}, Entire content: {video.file.read(100)}...")
-    video.file.seek(0)  # Reset file pointer after reading for logging
-    # Create a temporary file to store the uploaded video
-    # Using tempfile.NamedTemporaryFile ensures a unique filename and proper cleanup on exit
-    # However, for background tasks, we manage deletion explicitly.
-    os.makedirs(TEMP_VIDEO_DIR, exist_ok=True)  # <-- Add this line
 
+    os.makedirs(TEMP_VIDEO_DIR, exist_ok=True)
     temp_file_path = os.path.join(TEMP_VIDEO_DIR, video.filename)
-    print(temp_file_path)
+    output_file_path = os.path.join(TEMP_VIDEO_DIR, f"stickfig_{video.filename}")
+
     try:
         with open(temp_file_path, "wb") as buffer:
             shutil.copyfileobj(video.file, buffer)
-        print(f"Video saved temporarily to: {temp_file_path}")
 
-        # Add the video processing to background tasks
-        # background_tasks.add_task(process_video_with_mediapipe, temp_file_path)
+        # Process the video to generate stick figure video
+        stickfig_path, angles_array = get_stickfigure(temp_file_path, output_file_path)
+
+        # Check if the stick figure video was generated and is not empty
+        # if not os.path.exists(stickfig_path) or os.path.getsize(stickfig_path) == 0:
+        #     return JSONResponse(status_code=500, content={"message": "Stick figure video was not generated or is empty."})
+        with open(stickfig_path, "rb") as f:
+            video_bytes = f.read()
+            video_b64 = base64.b64encode(video_bytes).decode("utf-8")
+        # Convert angles_array to list for JSON serialization
+        # angles_list = angles_array.tolist() if hasattr(angles_array, "tolist") else angles_array
+
+
+        # Replace NaN and inf with 999. for JSON serialization
+        angles_clean = np.where(np.isnan(angles_array), 999., angles_array)
+        angles_clean = np.where(np.isinf(angles_clean), 999., angles_clean)
+        angles_list = angles_clean.tolist()
 
         return JSONResponse(status_code=200, content={
-            "message": "Video received and processing started in the background.",
-            "filename": video.filename,
-            "content_type": video.content_type,
-            "temp_path": temp_file_path
+            "message": "Stick figure video generated successfully.",
+            "filename": os.path.basename(stickfig_path),
+            "video_base64": video_b64,
+            "content_type": "video/mp4",
+            "angles_array": angles_list
         })
+
+        # def iterfile(file_path):
+        #     with open(file_path, "rb") as file_like:
+        #         while True:
+        #             chunk = file_like.read(1024 * 1024)
+        #             if not chunk:
+        #                 break
+        #             yield chunk
+        # # start a background task to run model prediction using angle_data_list and data TODO
+        # print(angles_array)
+        # return StreamingResponse(
+        #     iterfile(stickfig_path),
+        #     media_type="video/mp4",
+        #     headers={"Content-Disposition": f"attachment; filename=stickfig_{video.filename}"}
+        # )
     except Exception as e:
-        # Ensure temporary file is cleaned up if an error occurs during saving
         if os.path.exists(temp_file_path):
             os.remove(temp_file_path)
         return JSONResponse(status_code=500, content={"message": f"Failed to save video: {e}"})

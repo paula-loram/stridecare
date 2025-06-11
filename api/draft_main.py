@@ -12,9 +12,11 @@ from starlette.responses import JSONResponse
 import tensorflow as tf
 
 # --- Imported custom modules ---
-from video_angle_processor import get_mediapipe_angles #-------> do we need them if they are contained in other functions?
+from api.video_angle_processor import get_mediapipe_angles
+# from video_angle_processor import get_mediapipe_angles #-------> do we need them if they are contained in other functions?
+# Old location - Leo
 from api.preprocessing import load_scalers, preprocess_angles, preprocess_metadata
-from get_stickfigure import get_stickfigure
+from api.get_stickfigure import get_stickfigure
 
 # --- Configuration & Model Path ---
 #will be bucket

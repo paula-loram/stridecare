@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 import joblib # To load pre-trained scikit-learn scalers
 import os
-#from video_angle_processor import get_mediapipe_angles ----> no longer need because angles obtained from get_stickfigure
 from google.cloud import storage
 
 
