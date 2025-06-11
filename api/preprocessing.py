@@ -144,6 +144,10 @@ def preprocess_angles(raw_angles_array: np.array) -> np.array:
     """
     num_expected_features = 10 # 2pelvis, 4 hips, 4 knees
 
+    # Extract Angles using angle_processor.py
+#    angles_array = get_mediapipe_angles(temp_video_path)
+#    print(f"Backend: Extracted angles shape: {angles_array.shape if angles_array.size > 0 else 'Empty'}")
+
     # If no angle data was extracted for the video, create a NaN array for processing
     if raw_angles_array.size == 0:
         print("Preprocessing: No raw angle data found; creating a NaN-filled sequence.")
