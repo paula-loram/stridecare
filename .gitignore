@@ -32,6 +32,7 @@ training_outputs/
 *.sublime-project
 *.sublime-workspace
 **/*.code-workspace
+temp_videos/
 
 # Other
 pytestdebug.log
