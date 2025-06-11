@@ -16,6 +16,7 @@ from google.cloud import storage
 from video_angle_processor import get_mediapipe_angles
 from api.preprocessing import load_scalers, preprocess_angles, preprocess_metadata
 from api.preprocessing import cat_metadata_scaler, numerical_metadata_scaler  # to check scaler status in health check
+from load_model import load_model
 
 # --- Configuration & Model Path ---
 MODEL_PATH = "./RNN/my_model_weights.weights.h5" #----------> get bucket address
@@ -47,49 +48,32 @@ app = FastAPI(
     version="1.0.0"
 )
 
-
-@app.on_event("startup")
-async def startup_event():
-    global model
-    # Load the model
-    try:
-        model = tf.keras.models.load_model(MODEL_PATH) #MAKE FUNCTION TO CREATE MODEL : EMPTY THEN FIT WEIGHTS (NO COMPILE OR TRAIN, MODEL LOAD WEIGHTS)
-        if model.output_shape[-1] != len(MODEL_OUTPUT_LABELS):
-            print(f"WARNING: Model output layer size ({model.output_shape[-1]}) "
-                  f"does not match number of defined labels ({len(MODEL_OUTPUT_LABELS)}).")
-        print(f"Server Startup: Successfully loaded model from {MODEL_PATH}")
-    except Exception as e:
-        print(f"Server Startup Error: Could not load model. Error: {e}")
-        model = None
-
-    # Load scalers
-    scalers_loaded_successfully = load_scalers()
-    if not scalers_loaded_successfully:
-        print("Server Startup Error: Failed to load preprocessing scalers. API functionality may be degraded.")
+app.state.model = load_model() #---------> new
+app.state.scalers = load_scalers() #----------> new
 
 @app.get("/")
 def root():
     return {'status': 'backend up!'}
 
-@app.get("/health")
-async def health_check():
-    status = "healthy"
-    detail = "All assets loaded."
+# @app.get("/health")
+# async def health_check():
+#     status = "healthy"
+#     detail = "All assets loaded."
 
-    if model is None:
-        status = "degraded"
-        detail = "Model not loaded."
-    elif cat_metadata_scaler is None or numerical_metadata_scaler is None:
-        status = "degraded"
-        detail = "Scalers not loaded."
+#     if model is None:
+#         status = "degraded"
+#         detail = "Model not loaded."
+#     elif cat_metadata_scaler is None or numerical_metadata_scaler is None:
+#         status = "degraded"
+#         detail = "Scalers not loaded."
 
-    return {
-        "status": status,
-        "model_loaded": model is not None,
-        "cat_metadata_scaler_loaded": cat_metadata_scaler is not None,
-        "numerical_metadata_scaler_loaded": numerical_metadata_scaler is not None,
-        "detail": detail
-    }
+#     return {
+#         "status": status,
+#         "model_loaded": model is not None,
+#         "cat_metadata_scaler_loaded": cat_metadata_scaler is not None,
+#         "numerical_metadata_scaler_loaded": numerical_metadata_scaler is not None,
+#         "detail": detail
+#     }
 
 @app.post("/get_stick_fig_video")
 async def upload_video(background_tasks: BackgroundTasks, video: UploadFile = File(...)):
@@ -118,12 +102,14 @@ async def upload_video(background_tasks: BackgroundTasks, video: UploadFile = Fi
             os.remove(temp_file_path)
         return JSONResponse(status_code=500, content={"message": f"Failed to save video: {e}"})
 
-@app.post("/predict")
-
+@app.post("/predict") #-----------> we don't need to load video anymore
 async def predict_injury_risk(
     video: UploadFile = File(...),
     metadata: str = Form(...)
 ):
+
+    model = app.state.model #------> load model
+    scalers = app.state.scalers #------> load scalers from above
     if model is None:
         raise HTTPException(status_code=500, detail="Model not loaded. Server not ready.")
 
@@ -149,7 +135,7 @@ async def predict_injury_risk(
             temp_video_path = temp_file.name
 
         # Extract angles
-        angles_array = get_mediapipe_angles(temp_video_path)
+        #angles_array = get_mediapipe_angles(temp_video_path) #--------> we dont need to use this anymore, we need the angles from
 
         # Preprocess angles and metadata
         processed_angles = preprocess_angles(angles_array)
@@ -174,7 +160,7 @@ async def predict_injury_risk(
             print(f"Backend Warning: Unexpected model output shape: {prediction_raw.shape}")
 
         return JSONResponse(content={
-            "message": "Video analyzed and prediction made successfully.",
+            "message": "Video analyzed and prediction made.",
             "prediction": predicted_label,
             "confidence": confidence,
             "all_class_probabilities": all_class_probabilities,
