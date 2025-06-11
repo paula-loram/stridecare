@@ -58,7 +58,17 @@ def root():
         'status' : 'backend up!'
     }
 
-@app.post("/get_stick_fig_video")
+def cleanup_temp_videos():
+    temp_dir = TEMP_VIDEO_DIR
+    for filename in os.listdir(temp_dir):
+        file_path = os.path.join(temp_dir, filename)
+        try:
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+        except Exception as e:
+            print(f"Failed to remove {file_path}: {e}")
+
+@app.post("/get_stick_fig_video/")
 async def upload_video(background_tasks: BackgroundTasks, video: UploadFile = File(...)):
     """
     Receives a video file, saves it temporarily, and then
@@ -87,9 +97,6 @@ async def upload_video(background_tasks: BackgroundTasks, video: UploadFile = Fi
         # Process the video to generate stick figure video
         stickfig_path, angles_array = get_stickfigure(temp_file_path, output_file_path)
 
-        # Check if the stick figure video was generated and is not empty
-        # if not os.path.exists(stickfig_path) or os.path.getsize(stickfig_path) == 0:
-        #     return JSONResponse(status_code=500, content={"message": "Stick figure video was not generated or is empty."})
         with open(stickfig_path, "rb") as f:
             video_bytes = f.read()
             video_b64 = base64.b64encode(video_bytes).decode("utf-8")
@@ -101,6 +108,9 @@ async def upload_video(background_tasks: BackgroundTasks, video: UploadFile = Fi
         angles_clean = np.where(np.isnan(angles_array), 999., angles_array)
         angles_clean = np.where(np.isinf(angles_clean), 999., angles_clean)
         angles_list = angles_clean.tolist()
+
+        # Schedule cleanup of temp_videos after response is sent
+        background_tasks.add_task(cleanup_temp_videos)
 
         return JSONResponse(status_code=200, content={
             "message": "Stick figure video generated successfully.",
@@ -129,7 +139,7 @@ async def upload_video(background_tasks: BackgroundTasks, video: UploadFile = Fi
             os.remove(temp_file_path)
         return JSONResponse(status_code=500, content={"message": f"Failed to save video: {e}"})
 
-@app.post("/predict")
+@app.post("/predict/")
 async def predict_injury_risk(
     data: dict = Body(...)
 ):
